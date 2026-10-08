@@ -35,6 +35,10 @@ async function ensureCsrfToken(): Promise<string | null> {
   return cachedCsrfToken;
 }
 
+// Called once at app startup (main.tsx) so GET /csrf runs before any other
+// request, not just lazily before the first POST/PUT.
+export const primeCsrfToken = ensureCsrfToken;
+
 apiClient.interceptors.request.use(async (config) => {
   const method = config.method?.toUpperCase();
   if ((method === 'POST' || method === 'PUT') && !config.url?.includes('/csrf')) {
@@ -70,12 +74,17 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
     const status = error.response?.status;
 
-    if (!originalRequest || isAuthEndpoint(originalRequest.url)) {
+    if (!originalRequest) {
       return Promise.reject(error);
     }
 
-    // 401: one shared rotate, one retry per request
+    // 401: one shared rotate, one retry per request.
+    // Auth endpoints are excluded here (not from 419 below) so rotate/login/revoke
+    // can never recursively retry themselves through another rotate.
     if (status === 401) {
+      if (isAuthEndpoint(originalRequest.url)) {
+        return Promise.reject(error);
+      }
       if (originalRequest._retriedAfter401) {
         // A second 401 after a retry already happened -> end the session.
         triggerForceLogout();
@@ -92,7 +101,7 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // 419: refetch CSRF and retry once
+    // 419: refetch CSRF and retry once — applies to every request, auth endpoints included.
     if (status === 419) {
       if (originalRequest._retriedAfter419) {
         return Promise.reject(error);

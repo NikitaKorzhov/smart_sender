@@ -1,6 +1,22 @@
 import { http, HttpResponse } from 'msw';
 import type { Webhook, MeResponse } from '../types/api';
 
+interface LoginBody {
+  email?: string;
+  password?: string;
+  fingerprint?: string;
+}
+
+interface IssueBody {
+  device_session_token?: string;
+  fingerprint?: string;
+}
+
+interface WebhookUpdateBody {
+  name?: string;
+  url?: string;
+}
+
 let isSessionActive = false;
 let sessionTimer: ReturnType<typeof setTimeout> | null = null;
 const FIXED_CSRF_TOKEN = 'mock-fixed-csrf-token-12345';
@@ -47,6 +63,16 @@ function checkCsrf(request: Request) {
   return request.headers.get('X-CSRF-TOKEN') === FIXED_CSRF_TOKEN;
 }
 
+function isValidHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export const handlers = [
   // GET /csrf -> 204 + X-CSRF-TOKEN header
   http.get('*/csrf', () => {
@@ -67,7 +93,7 @@ export const handlers = [
       });
     }
 
-    const body: any = await request.json().catch(() => ({}));
+    const body = (await request.json().catch(() => ({}))) as LoginBody;
     if (body.email !== MOCK_EMAIL || body.password !== MOCK_PASSWORD) {
       return errorResponse(422, 'ValidationException', 'The given data was invalid.', {
         email: ['Invalid credentials.'],
@@ -82,7 +108,7 @@ export const handlers = [
     if (!checkCsrf(request)) {
       return errorResponse(419, 'TokenMismatchException', 'CSRF token mismatch.');
     }
-    const body: any = await request.json().catch(() => ({}));
+    const body = (await request.json().catch(() => ({}))) as IssueBody;
     if (!body.device_session_token) {
       return errorResponse(422, 'ValidationException', 'The given data was invalid.', {
         device_session_token: ['The device session token is required.'],
@@ -172,13 +198,13 @@ export const handlers = [
     }
 
     const { id } = params;
-    const body: any = await request.json().catch(() => ({}));
+    const body = (await request.json().catch(() => ({}))) as WebhookUpdateBody;
     const errors: Record<string, string[]> = {};
 
-    if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
+    if (!body.name || body.name.trim() === '') {
       errors.name = ['The name field is required.'];
     }
-    if (!body.url || !/^https?:\/\/.+/i.test(body.url)) {
+    if (!isValidHttpUrl(body.url)) {
       errors.url = ['The url must be a valid URL.'];
     }
     if (Object.keys(errors).length > 0) {
@@ -190,8 +216,9 @@ export const handlers = [
       return errorResponse(404, 'NotFoundException', 'Webhook not found.');
     }
 
-    webhook.name = body.name;
-    webhook.url = body.url;
+    // Both fields are validated above, so non-null assertions are safe here.
+    webhook.name = body.name!;
+    webhook.url = body.url!;
     return HttpResponse.json(webhook, { status: 200 });
   }),
 ];
