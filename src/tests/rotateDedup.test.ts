@@ -19,6 +19,7 @@ describe('rotate deduplication on concurrent 401s', () => {
     let rotateCalls = 0;
     let meCalls = 0;
     let webhooksCalls = 0;
+    const retriedWebhooksParams: { current: URLSearchParams | null } = { current: null };
 
     server.use(
       // First call to each endpoint -> 401 (simulated expired session),
@@ -30,11 +31,12 @@ describe('rotate deduplication on concurrent 401s', () => {
         }
         return HttpResponse.json({ id: 'u1', email: 'a@b.c', first_name: 'A', last_name: 'B', name: 'A B' });
       }),
-      http.get('*/v1/webhooks', () => {
+      http.get('*/v1/webhooks', ({ request }) => {
         webhooksCalls += 1;
         if (webhooksCalls === 1) {
           return HttpResponse.json({ error: { type: 'AuthenticationException', message: '', payload: null } }, { status: 401 });
         }
+        retriedWebhooksParams.current = new URL(request.url).searchParams;
         return HttpResponse.json({
           data: [],
           paging: { pages: { current: 1, last: 1 }, results: { total: 0, limitation: 10 } },
@@ -54,5 +56,10 @@ describe('rotate deduplication on concurrent 401s', () => {
     expect(meResponse.status).toBe(200);
     expect(webhooksResponse.status).toBe(200);
     expect(rotateCalls).toBe(1);
+
+    // The retried request must be the same original request, params included — not a fresh one.
+    expect(retriedWebhooksParams.current?.get('page')).toBe('1');
+    expect(retriedWebhooksParams.current?.get('limit')).toBe('10');
+    expect(retriedWebhooksParams.current?.get('search')).toBe('');
   });
 });

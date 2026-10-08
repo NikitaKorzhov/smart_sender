@@ -17,8 +17,15 @@ interface WebhookUpdateBody {
   url?: string;
 }
 
-let isSessionActive = false;
-let sessionTimer: ReturnType<typeof setTimeout> | null = null;
+// `sessionEstablished` survives the 30s window expiring — it only goes false on
+// revoke (or before the first successful issue). `sessionExpiresAt` tracks the
+// current 30s window on its own. Keeping these separate matters: rotate's job is
+// specifically to recover a session whose window just expired, so rotate must not
+// depend on the window still being open — only on a session having been issued and
+// not revoked. Conflating the two into one flag was an actual bug (caught by manually
+// walking through a real 30s expiry): rotate return 400 right when it was needed most.
+let sessionEstablished = false;
+let sessionExpiresAt = 0;
 const FIXED_CSRF_TOKEN = 'mock-fixed-csrf-token-12345';
 
 // 27 seed webhooks (within the 25-30 range)
@@ -50,14 +57,21 @@ function errorResponse(
   return HttpResponse.json({ error: { type, message, payload } }, { status });
 }
 
-// 30s session lifetime
-const startSessionTimer = () => {
-  if (sessionTimer) clearTimeout(sessionTimer);
-  isSessionActive = true;
-  sessionTimer = setTimeout(() => {
-    isSessionActive = false;
-  }, 30000);
-};
+const SESSION_TTL_MS = 30000;
+
+function extendSession() {
+  sessionEstablished = true;
+  sessionExpiresAt = Date.now() + SESSION_TTL_MS;
+}
+
+function endSession() {
+  sessionEstablished = false;
+  sessionExpiresAt = 0;
+}
+
+function isWithinSessionWindow() {
+  return sessionEstablished && Date.now() < sessionExpiresAt;
+}
 
 function checkCsrf(request: Request) {
   return request.headers.get('X-CSRF-TOKEN') === FIXED_CSRF_TOKEN;
@@ -115,19 +129,21 @@ export const handlers = [
       });
     }
 
-    startSessionTimer();
+    extendSession();
     return new HttpResponse(null, { status: 200 });
   }),
 
-  // POST /auth/token/rotate -> +30s; 400 before issue / after revoke
+  // POST /auth/token/rotate -> +30s; 400 before issue / after revoke.
+  // Succeeds whenever a session has been established and not revoked —
+  // including (especially) right after its 30s window just expired.
   http.post('*/auth/token/rotate', ({ request }) => {
     if (!checkCsrf(request)) {
       return errorResponse(419, 'TokenMismatchException', 'CSRF token mismatch.');
     }
-    if (!isSessionActive) {
+    if (!sessionEstablished) {
       return errorResponse(400, 'BadRequestException', 'Session is not active.');
     }
-    startSessionTimer();
+    extendSession();
     return new HttpResponse(null, { status: 200 });
   }),
 
@@ -136,13 +152,12 @@ export const handlers = [
     if (!checkCsrf(request)) {
       return errorResponse(419, 'TokenMismatchException', 'CSRF token mismatch.');
     }
-    isSessionActive = false;
-    if (sessionTimer) clearTimeout(sessionTimer);
+    endSession();
     return new HttpResponse(null, { status: 204 });
   }),
 
   http.get('*/v1/me', () => {
-    if (!isSessionActive) {
+    if (!isWithinSessionWindow()) {
       return errorResponse(401, 'AuthenticationException', 'Unauthenticated.');
     }
     return HttpResponse.json(mockUser, { status: 200 });
@@ -150,7 +165,7 @@ export const handlers = [
 
   // GET /v1/webhooks -> paginated + searchable list
   http.get('*/v1/webhooks', ({ request }) => {
-    if (!isSessionActive) {
+    if (!isWithinSessionWindow()) {
       return errorResponse(401, 'AuthenticationException', 'Unauthenticated.');
     }
 
@@ -178,7 +193,7 @@ export const handlers = [
   }),
 
   http.get('*/v1/webhooks/:id', ({ params }) => {
-    if (!isSessionActive) {
+    if (!isWithinSessionWindow()) {
       return errorResponse(401, 'AuthenticationException', 'Unauthenticated.');
     }
     const webhook = mockWebhooks.find((w) => w.id === params.id);
@@ -190,11 +205,11 @@ export const handlers = [
 
   // PUT /v1/webhooks/{id} -> validate + update
   http.put('*/v1/webhooks/:id', async ({ params, request }) => {
-    if (!isSessionActive) {
-      return errorResponse(401, 'AuthenticationException', 'Unauthenticated.');
-    }
     if (!checkCsrf(request)) {
       return errorResponse(419, 'TokenMismatchException', 'CSRF token mismatch.');
+    }
+    if (!isWithinSessionWindow()) {
+      return errorResponse(401, 'AuthenticationException', 'Unauthenticated.');
     }
 
     const { id } = params;

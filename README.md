@@ -17,9 +17,9 @@ src/
   types/       — shared API contract types
   mocks/       — MSW handlers + in-memory data
   api/         — axios instance, interceptors (CSRF, 401-rotate, 419-retry), typed error parsing
-  auth/        — AuthContext, fingerprint utility, sessionBridge
-  pages/       — LoginPage, WebhooksPage + the colocated useWebhookList data hook
-  components/  — WebhookEditModal and other UI components
+  auth/        — AuthContext/AuthContextBase/useAuth (split to keep Fast Refresh happy), fingerprint utility, sessionBridge
+  pages/       — LoginPage/WebhooksPage (view only) + colocated hooks (useLoginForm, useWebhooksPage, useWebhookList) holding all state and API calls
+  components/  — WebhookEditModal (view only) + colocated useWebhookEditForm hook
   tests/       — automated tests
 ```
 
@@ -27,18 +27,23 @@ src/
 
 ```bash
 npm install
-npm run dev    # dev server
+npm run dev    # dev server, http://localhost:5173 by default
 npm test        # automated test
 ```
 
 ## Test credentials
 
-_TODO._
+- Email: `admin@smart-sender.test`
+- Password: `password123`
 
 ## Key decisions
 
-_TODO: rotate deduplication, in-memory-only token storage, URL as the source of truth for the list, etc._
+- 401s are recovered by a single shared rotate call: concurrent requests that hit an expired session wait on the same `/auth/token/rotate` promise instead of each triggering their own.
+- `device_session_token` lives in memory only (never `localStorage`/the URL); `fingerprint` is the only thing persisted, in `localStorage`.
+- The URL is the single source of truth for `page`/`search` in the webhook list — no local state duplicates it, so reloads and browser back/forward restore the list correctly.
+- Visiting `/webhooks` without a session (direct link or after a reload) redirects to `/login` while preserving the original path and query; signing in again returns the user to that exact page/search instead of a default view.
 
 ## Known gaps
 
-_TODO, if anything is left unfinished._
+- Only the mandatory automated test (rotate deduplication on concurrent 401s) ships in the repo. A couple of extra scenarios — 419 → CSRF retry, forced logout on a second consecutive 401 — were manually verified during development but aren't part of the committed test suite.
+- 419 retries aren't deduplicated across concurrent requests the way 401 rotates are: each concurrent 419 independently refetches the CSRF token. Low risk — refetching CSRF is idempotent and cheap, unlike rotate, which mutates session state server-side — so the extra coordination wasn't worth it at this scope.

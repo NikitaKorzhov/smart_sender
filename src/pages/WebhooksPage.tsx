@@ -1,51 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useAuth } from '../auth/useAuth';
-import { useWebhookList } from './useWebhookList';
+import { useWebhooksPage } from './useWebhooksPage';
 import { WebhookEditModal } from '../components/WebhookEditModal';
 import './WebhooksPage.css';
 
-export const WebhooksPage: React.FC = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { logout } = useAuth();
-
-  // Derived straight from the URL — no duplicate useState.
-  const page = parseInt(searchParams.get('page') || '1', 10);
-  const search = searchParams.get('search') || '';
-
-  // Local state only for the controlled input, so we don't write to the URL on every keystroke.
-  const [searchInput, setSearchInput] = useState(search);
-  // Adjust state during render instead of in an effect when `search` changes externally
-  // (browser back/forward) — avoids an extra render-after-commit round trip.
-  const [syncedSearch, setSyncedSearch] = useState(search);
-  if (search !== syncedSearch) {
-    setSyncedSearch(search);
-    setSearchInput(search);
-  }
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  // Debounced URL write, resetting to page 1 on an actual search change.
-  // `search` is a dependency too: if the URL changes externally (browser back/forward)
-  // while this is pending, the stale timer is cleared along with the old effect.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchInput === search) return;
-      const next = new URLSearchParams();
-      next.set('page', '1');
-      if (searchInput) next.set('search', searchInput);
-      setSearchParams(next);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [searchInput, search]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const { webhooks, paging, isLoading, error, updateWebhookLocally } = useWebhookList(page, search);
-
-  const goToPage = (newPage: number) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('page', String(newPage));
-    setSearchParams(next);
-  };
+export const WebhooksPage = () => {
+  const {
+    logout,
+    page,
+    searchInput,
+    setSearchInput,
+    webhooks,
+    paging,
+    isLoading,
+    error,
+    editingId,
+    openEdit,
+    closeEdit,
+    handleSaved,
+    goToPage,
+  } = useWebhooksPage();
 
   return (
     <div className="webhooks-page">
@@ -60,6 +32,7 @@ export const WebhooksPage: React.FC = () => {
         <input
           type="text"
           className="search-input"
+          aria-label="Search by name"
           placeholder="Search by name..."
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
@@ -94,7 +67,7 @@ export const WebhooksPage: React.FC = () => {
                           </span>
                         </td>
                         <td>
-                          <button className="row-edit-button" onClick={() => setEditingId(webhook.id)}>
+                          <button className="row-edit-button" onClick={() => openEdit(webhook.id)}>
                             Edit
                           </button>
                         </td>
@@ -121,16 +94,7 @@ export const WebhooksPage: React.FC = () => {
           </>
         )}
 
-        {editingId && (
-          <WebhookEditModal
-            webhookId={editingId}
-            onClose={() => setEditingId(null)}
-            onSaved={(updated) => {
-              updateWebhookLocally(updated);
-              setEditingId(null);
-            }}
-          />
-        )}
+        {editingId && <WebhookEditModal webhookId={editingId} onClose={closeEdit} onSaved={handleSaved} />}
       </div>
     </div>
   );
