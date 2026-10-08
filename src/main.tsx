@@ -10,9 +10,10 @@ async function enableMocking() {
   return worker.start({ onUnhandledRequest: 'bypass' });
 }
 
-// GET /csrf runs before any other request, not just lazily before the first POST/PUT.
+// GET /csrf runs before the first render. If it fails, swallow it instead of
+// blocking render forever — the interceptor still fetches it lazily before the first POST/PUT.
 enableMocking()
-  .then(() => primeCsrfToken())
+  .then(() => primeCsrfToken().catch(() => {}))
   .then(() => {
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>

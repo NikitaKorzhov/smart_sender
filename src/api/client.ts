@@ -17,26 +17,35 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Auth endpoints are excluded from the 401-retry logic below so that
-// rotate/login/revoke can never recursively retry themselves.
+// Rotate/login/revoke never go through the 401 retry below, so rotate can't retry itself.
 const AUTH_ENDPOINTS = ['/auth/login', '/auth/token/issue', '/auth/token/rotate', '/auth/token/revoke', '/csrf'];
 const isAuthEndpoint = (url?: string) => !!url && AUTH_ENDPOINTS.some((p) => url.includes(p));
 
 let cachedCsrfToken: string | null = null;
+let csrfFetchPromise: Promise<string | null> | null = null;
 
-async function fetchCsrfToken(): Promise<string | null> {
-  const response = await apiClient.get('/csrf');
-  cachedCsrfToken = (response.headers['x-csrf-token'] as string) || null;
-  return cachedCsrfToken;
+// Shared like rotate below, so concurrent requests needing a token don't each fetch their own.
+function fetchCsrfToken(): Promise<string | null> {
+  if (!csrfFetchPromise) {
+    csrfFetchPromise = apiClient
+      .get('/csrf')
+      .then((response) => {
+        cachedCsrfToken = (response.headers['x-csrf-token'] as string) || null;
+        return cachedCsrfToken;
+      })
+      .finally(() => {
+        csrfFetchPromise = null;
+      });
+  }
+  return csrfFetchPromise;
 }
 
-async function ensureCsrfToken(): Promise<string | null> {
-  if (!cachedCsrfToken) await fetchCsrfToken();
-  return cachedCsrfToken;
+function ensureCsrfToken(): Promise<string | null> {
+  if (cachedCsrfToken) return Promise.resolve(cachedCsrfToken);
+  return fetchCsrfToken();
 }
 
-// Called once at app startup (main.tsx) so GET /csrf runs before any other
-// request, not just lazily before the first POST/PUT.
+// Called from main.tsx so GET /csrf runs before the first render, not just lazily.
 export const primeCsrfToken = ensureCsrfToken;
 
 apiClient.interceptors.request.use(async (config) => {
@@ -63,8 +72,7 @@ function rotateSessionOnce(): Promise<unknown> {
   return refreshPromise;
 }
 
-// axios doesn't know about these — they're our own retry markers, stamped
-// onto the same config object that gets replayed via `apiClient(originalRequest)`.
+// Our own retry markers, stamped onto the config object replayed via apiClient(originalRequest).
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retriedAfter401?: boolean;
   _retriedAfter419?: boolean;
@@ -85,9 +93,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 401: one shared rotate, one retry per request.
-    // Auth endpoints are excluded here (not from 419 below) so rotate/login/revoke
-    // can never recursively retry themselves through another rotate.
+    // 401: one shared rotate, one retry per request. Excluded here, not in 419 below.
     if (status === 401) {
       if (isAuthEndpoint(originalRequest.url)) {
         return Promise.reject(error);
@@ -108,7 +114,7 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // 419: refetch CSRF and retry once — applies to every request, auth endpoints included.
+    // 419: refetch CSRF and retry once, for every request including auth endpoints.
     if (status === 419) {
       if (originalRequest._retriedAfter419) {
         return Promise.reject(error);

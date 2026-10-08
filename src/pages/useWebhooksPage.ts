@@ -8,14 +8,14 @@ export function useWebhooksPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { logout } = useAuth();
 
-  // Derived straight from the URL — no duplicate useState.
-  const page = parseInt(searchParams.get('page') || '1', 10);
+  // Derived straight from the URL, no duplicate useState. Invalid `page` falls back to 1.
+  const rawPage = Number(searchParams.get('page'));
+  const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   const search = searchParams.get('search') || '';
 
-  // Local state only for the controlled input, so we don't write to the URL on every keystroke.
+  // Local state for the controlled input, so typing doesn't write to the URL on every key.
   const [searchInput, setSearchInput] = useState(search);
-  // Adjust state during render instead of in an effect when `search` changes externally
-  // (browser back/forward) — avoids an extra render-after-commit round trip.
+  // Resync on external URL changes (back/forward) during render, not in an effect.
   const [syncedSearch, setSyncedSearch] = useState(search);
   if (search !== syncedSearch) {
     setSyncedSearch(search);
@@ -24,9 +24,7 @@ export function useWebhooksPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Debounced URL write, resetting to page 1 on an actual search change.
-  // `search` is a dependency too: if the URL changes externally (browser back/forward)
-  // while this is pending, the stale timer is cleared along with the old effect.
+  // Debounced URL write, resets to page 1 on an actual search change.
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchInput === search) return;

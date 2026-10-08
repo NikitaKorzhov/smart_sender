@@ -9,7 +9,7 @@ interface Props {
 }
 
 export const WebhookEditModal = ({ webhookId, onSaved, onClose }: Props) => {
-  const { name, setName, url, setUrl, isLoadingWebhook, errors, isSubmitting, generalError, handleSubmit } =
+  const { name, setName, url, setUrl, isLoadingWebhook, loadError, errors, isSubmitting, generalError, handleSubmit } =
     useWebhookEditForm(webhookId, onSaved);
 
   if (isLoadingWebhook) {
@@ -17,6 +17,22 @@ export const WebhookEditModal = ({ webhookId, onSaved, onClose }: Props) => {
       <div className="modal-overlay" role="dialog">
         <div className="modal-card">
           <div className="modal-loading">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="modal-overlay" role="dialog">
+        <div className="modal-card">
+          <h3>Edit webhook</h3>
+          <div className="modal-general-error">{loadError}</div>
+          <div className="modal-actions">
+            <button type="button" className="modal-button-secondary" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </div>
       </div>
     );

@@ -17,13 +17,10 @@ interface WebhookUpdateBody {
   url?: string;
 }
 
-// `sessionEstablished` survives the 30s window expiring — it only goes false on
-// revoke (or before the first successful issue). `sessionExpiresAt` tracks the
-// current 30s window on its own. Keeping these separate matters: rotate's job is
-// specifically to recover a session whose window just expired, so rotate must not
-// depend on the window still being open — only on a session having been issued and
-// not revoked. Conflating the two into one flag was an actual bug (caught by manually
-// walking through a real 30s expiry): rotate return 400 right when it was needed most.
+// Kept separate on purpose: `sessionEstablished` only changes on issue/revoke,
+// `sessionExpiresAt` tracks the current 30s window. Rotate checks only the former —
+// its job is to recover a window that just expired, so it can't depend on that window
+// still being open.
 let sessionEstablished = false;
 let sessionExpiresAt = 0;
 const FIXED_CSRF_TOKEN = 'mock-fixed-csrf-token-12345';
@@ -134,8 +131,6 @@ export const handlers = [
   }),
 
   // POST /auth/token/rotate -> +30s; 400 before issue / after revoke.
-  // Succeeds whenever a session has been established and not revoked —
-  // including (especially) right after its 30s window just expired.
   http.post('*/auth/token/rotate', ({ request }) => {
     if (!checkCsrf(request)) {
       return errorResponse(419, 'TokenMismatchException', 'CSRF token mismatch.');

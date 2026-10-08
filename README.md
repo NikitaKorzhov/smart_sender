@@ -28,7 +28,7 @@ src/
 ```bash
 npm install
 npm run dev    # dev server, http://localhost:5173 by default
-npm test        # automated test
+npm test        # automated tests
 ```
 
 ## Test credentials
@@ -38,12 +38,17 @@ npm test        # automated test
 
 ## Key decisions
 
-- 401s are recovered by a single shared rotate call: concurrent requests that hit an expired session wait on the same `/auth/token/rotate` promise instead of each triggering their own.
+- 401s are recovered by a single shared rotate call: concurrent requests that hit an expired session wait on the same `/auth/token/rotate` promise instead of each triggering their own. The CSRF token fetch (initial and on a 419 retry) is shared the same way.
 - `device_session_token` lives in memory only (never `localStorage`/the URL); `fingerprint` is the only thing persisted, in `localStorage`.
 - The URL is the single source of truth for `page`/`search` in the webhook list — no local state duplicates it, so reloads and browser back/forward restore the list correctly.
 - Visiting `/webhooks` without a session (direct link or after a reload) redirects to `/login` while preserving the original path and query; signing in again returns the user to that exact page/search instead of a default view.
 
+## Tests
+
+- `rotateDedup.test.ts` — the mandatory one: two concurrent 401s share a single rotate.
+- `csrfRetry.test.ts` — a 419 refetches the CSRF token and retries once.
+- `forceLogout.test.ts` — a second consecutive 401, and a failed rotate, both end the session.
+
 ## Known gaps
 
-- Only the mandatory automated test (rotate deduplication on concurrent 401s) ships in the repo. A couple of extra scenarios — 419 → CSRF retry, forced logout on a second consecutive 401 — were manually verified during development but aren't part of the committed test suite.
-- 419 retries aren't deduplicated across concurrent requests the way 401 rotates are: each concurrent 419 independently refetches the CSRF token. Low risk — refetching CSRF is idempotent and cheap, unlike rotate, which mutates session state server-side — so the extra coordination wasn't worth it at this scope.
+- Saving an edit patches the affected row in place instead of refetching the whole list, so the table doesn't flash a loading state on every save. If the edit makes the row stop matching the active search, it's dropped from the view and `results.total`/pagination are adjusted locally — a page that was exactly full isn't backfilled from the next page without a real reload.

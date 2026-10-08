@@ -42,12 +42,27 @@ export function useWebhookList(page: number, search: string) {
     };
   }, [page, search]);
 
-  // Patch one row locally without refetching the whole list.
+  // Patch one row locally instead of refetching the whole list. Drop it instead
+  // if the edit made it stop matching the active search.
   function updateWebhookLocally(updated: Webhook) {
-    setState((prev) => ({
-      ...prev,
-      webhooks: prev.webhooks.map((w) => (w.id === updated.id ? updated : w)),
-    }));
+    const stillMatches = updated.name.toLowerCase().includes(search.toLowerCase());
+
+    setState((prev) => {
+      if (stillMatches) {
+        return { ...prev, webhooks: prev.webhooks.map((w) => (w.id === updated.id ? updated : w)) };
+      }
+      if (!prev.paging) {
+        return { ...prev, webhooks: prev.webhooks.filter((w) => w.id !== updated.id) };
+      }
+
+      const total = prev.paging.results.total - 1;
+      const last = Math.max(1, Math.ceil(total / prev.paging.results.limitation));
+      return {
+        ...prev,
+        webhooks: prev.webhooks.filter((w) => w.id !== updated.id),
+        paging: { pages: { ...prev.paging.pages, last }, results: { ...prev.paging.results, total } },
+      };
+    });
   }
 
   return { ...state, updateWebhookLocally };

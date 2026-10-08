@@ -8,6 +8,7 @@ export function useWebhookEditForm(webhookId: string, onSaved: (webhook: Webhook
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [isLoadingWebhook, setIsLoadingWebhook] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -18,7 +19,7 @@ export function useWebhookEditForm(webhookId: string, onSaved: (webhook: Webhook
         setName(res.data.name);
         setUrl(res.data.url);
       })
-      .catch(() => setGeneralError('Failed to load the webhook.'))
+      .catch(() => setLoadError('Failed to load the webhook.'))
       .finally(() => setIsLoadingWebhook(false));
   }, [webhookId]);
 
@@ -42,5 +43,5 @@ export function useWebhookEditForm(webhookId: string, onSaved: (webhook: Webhook
     }
   };
 
-  return { name, setName, url, setUrl, isLoadingWebhook, errors, isSubmitting, generalError, handleSubmit };
+  return { name, setName, url, setUrl, isLoadingWebhook, loadError, errors, isSubmitting, generalError, handleSubmit };
 }
