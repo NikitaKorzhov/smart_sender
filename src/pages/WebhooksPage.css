@@ -159,6 +159,26 @@
   color: #6b7280;
 }
 
+.row-edit-button {
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #4f46e5;
+  background: transparent;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.row-edit-button:hover {
+  background: #eef2ff;
+  border-color: #a5b4fc;
+}
+
 .pagination {
   display: flex;
   align-items: center;

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { useWebhookList } from './useWebhookList';
+import { WebhookEditModal } from '../components/WebhookEditModal';
 import './WebhooksPage.css';
 
 export const WebhooksPage: React.FC = () => {
@@ -22,6 +23,8 @@ export const WebhooksPage: React.FC = () => {
     setSearchInput(search);
   }
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   // Debounced URL write, resetting to page 1 on an actual search change.
   // `search` is a dependency too: if the URL changes externally (browser back/forward)
   // while this is pending, the stale timer is cleared along with the old effect.
@@ -36,7 +39,7 @@ export const WebhooksPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchInput, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { webhooks, paging, isLoading, error } = useWebhookList(page, search);
+  const { webhooks, paging, isLoading, error, updateWebhookLocally } = useWebhookList(page, search);
 
   const goToPage = (newPage: number) => {
     const next = new URLSearchParams(searchParams);
@@ -77,6 +80,7 @@ export const WebhooksPage: React.FC = () => {
                       <th>Name</th>
                       <th>URL</th>
                       <th>Status</th>
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
@@ -88,6 +92,11 @@ export const WebhooksPage: React.FC = () => {
                           <span className={`status-badge ${webhook.active ? 'active' : 'disabled'}`}>
                             {webhook.active ? 'Active' : 'Disabled'}
                           </span>
+                        </td>
+                        <td>
+                          <button className="row-edit-button" onClick={() => setEditingId(webhook.id)}>
+                            Edit
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -110,6 +119,17 @@ export const WebhooksPage: React.FC = () => {
               </div>
             )}
           </>
+        )}
+
+        {editingId && (
+          <WebhookEditModal
+            webhookId={editingId}
+            onClose={() => setEditingId(null)}
+            onSaved={(updated) => {
+              updateWebhookLocally(updated);
+              setEditingId(null);
+            }}
+          />
         )}
       </div>
     </div>
