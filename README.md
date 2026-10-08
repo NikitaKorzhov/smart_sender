@@ -12,11 +12,24 @@ Built for the Smart Sender Senior Frontend Engineer take-home assignment.
 
 ## Architecture
 
-_TODO: `src/` layout and a short description of each layer._
+```
+src/
+  types/       — shared API contract types
+  mocks/       — MSW handlers + in-memory data
+  api/         — axios instance, interceptors (CSRF, 401-rotate, 419-retry), typed error parsing
+  auth/        — AuthContext, fingerprint utility, sessionBridge
+  pages/       — LoginPage, WebhooksPage + the colocated useWebhookList data hook
+  components/  — WebhookEditModal and other UI components
+  tests/       — automated tests
+```
 
 ## Running it
 
-_TODO: exact commands to run the app and the test._
+```bash
+npm install
+npm run dev    # dev server
+npm test        # automated test
+```
 
 ## Test credentials
 
