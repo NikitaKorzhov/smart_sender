@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type React from 'react';
-import { apiClient } from '../api/client';
+import { getWebhook, updateWebhook } from '../api/webhooks';
 import { getApiErrorStatus, getApiErrorPayload } from '../api/errors';
 import type { Webhook, ValidationErrors } from '../types/api';
 
@@ -13,8 +13,7 @@ export function useWebhookEditForm(webhookId: string, onSaved: (webhook: Webhook
   const [generalError, setGeneralError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiClient
-      .get<Webhook>(`/v1/webhooks/${webhookId}`)
+    getWebhook(webhookId)
       .then((res) => {
         setName(res.data.name);
         setUrl(res.data.url);
@@ -30,7 +29,7 @@ export function useWebhookEditForm(webhookId: string, onSaved: (webhook: Webhook
     setIsSubmitting(true);
 
     try {
-      const response = await apiClient.put<Webhook>(`/v1/webhooks/${webhookId}`, { name, url });
+      const response = await updateWebhook(webhookId, { name, url });
       onSaved(response.data);
     } catch (err) {
       if (getApiErrorStatus(err) === 422) {

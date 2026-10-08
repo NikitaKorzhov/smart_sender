@@ -16,7 +16,7 @@ Built for the Smart Sender Senior Frontend Engineer take-home assignment.
 src/
   types/       — shared API contract types
   mocks/       — MSW handlers + in-memory data
-  api/         — axios instance, interceptors (CSRF, 401-rotate, 419-retry), typed error parsing
+  api/         — client.ts (axios instance + typed interceptors), auth.ts/webhooks.ts (typed per-domain calls), errors.ts (typed error parsing)
   auth/        — AuthContext/AuthContextBase/useAuth (split to keep Fast Refresh happy), fingerprint utility, sessionBridge
   pages/       — LoginPage/WebhooksPage (view only) + colocated hooks (useLoginForm, useWebhooksPage, useWebhookList) holding all state and API calls
   components/  — WebhookEditModal (view only) + colocated useWebhookEditForm hook

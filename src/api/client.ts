@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { getOrCreateFingerprint } from '../auth/fingerprint';
 import { triggerForceLogout } from '../auth/sessionBridge';
 
@@ -63,6 +63,13 @@ function rotateSessionOnce(): Promise<unknown> {
   return refreshPromise;
 }
 
+// axios doesn't know about these — they're our own retry markers, stamped
+// onto the same config object that gets replayed via `apiClient(originalRequest)`.
+interface RetryableRequestConfig extends InternalAxiosRequestConfig {
+  _retriedAfter401?: boolean;
+  _retriedAfter419?: boolean;
+}
+
 apiClient.interceptors.response.use(
   (response) => {
     if (response.config.url?.includes('/csrf')) {
@@ -70,8 +77,8 @@ apiClient.interceptors.response.use(
     }
     return response;
   },
-  async (error) => {
-    const originalRequest = error.config;
+  async (error: AxiosError) => {
+    const originalRequest = error.config as RetryableRequestConfig | undefined;
     const status = error.response?.status;
 
     if (!originalRequest) {

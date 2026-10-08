@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { apiClient, setDeviceSessionToken } from '../api/client';
+import { setDeviceSessionToken } from '../api/client';
+import { login as loginRequest, issueSession, revokeSession, getMe } from '../api/auth';
 import { getOrCreateFingerprint } from './fingerprint';
 import { registerForceLogoutHandler } from './sessionBridge';
 import { AuthContext } from './AuthContextBase';
@@ -16,31 +17,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const fingerprint = getOrCreateFingerprint();
 
-    const loginResponse = await apiClient.post(
-      '/auth/login',
-      { email, password, fingerprint },
-      { headers: { 'X-Captcha-Token': 'mock-captcha-non-empty-value' } }
-    );
-
+    const loginResponse = await loginRequest(email, password, fingerprint);
     const { device_session_token } = loginResponse.data;
     setDeviceSessionToken(device_session_token);
 
     try {
-      await apiClient.post('/auth/token/issue', { device_session_token, fingerprint });
+      await issueSession(device_session_token, fingerprint);
     } catch (err) {
       // issue failed — the token was never actually activated into a session, don't keep it around.
       setDeviceSessionToken(null);
       throw err;
     }
 
-    const me = await apiClient.get<MeResponse>('/v1/me');
+    const me = await getMe();
     setUser(me.data);
   }, []);
 
   const logout = useCallback(async () => {
     const fingerprint = getOrCreateFingerprint();
     try {
-      await apiClient.post('/auth/token/revoke', { fingerprint });
+      await revokeSession(fingerprint);
     } finally {
       forceLogout();
     }

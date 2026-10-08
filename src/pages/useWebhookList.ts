@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiClient } from '../api/client';
+import { listWebhooks } from '../api/webhooks';
 import type { Webhook, PagingInfo } from '../types/api';
 
 const LIMIT = 10;
@@ -23,8 +23,7 @@ export function useWebhookList(page: number, search: string) {
     let cancelled = false;
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
-    apiClient
-      .get('/v1/webhooks', { params: { page, limit: LIMIT, search } })
+    listWebhooks({ page, limit: LIMIT, search })
       .then((response) => {
         if (cancelled) return;
         setState({ webhooks: response.data.data, paging: response.data.paging, isLoading: false, error: null });
